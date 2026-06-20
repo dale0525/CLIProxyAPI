@@ -506,7 +506,7 @@ func (e *CodexWebsocketsExecutor) Execute(ctx context.Context, auth *cliproxyaut
 						helps.RecordAPIWebsocketError(ctx, e.cfg, "send_retry_close_sent", errSendRetry)
 						continue
 					}
-					if shouldFallbackCodexWebsocketSendErrorToHTTP(errSendRetry, upstreamBody) {
+					if shouldFallbackCodexWebsocketSendErrorToHTTP(sess, connRetry, errSendRetry, upstreamBody) {
 						e.clearUpstreamConn(sess, connRetry, "send_close_sent_http_fallback", errSendRetry, false)
 						helps.RecordAPIWebsocketError(ctx, e.cfg, "send_close_sent_http_fallback", errSendRetry)
 						fallbackReq, fallbackOpts := codexHTTPFallbackRequest(req, opts)
@@ -573,7 +573,7 @@ func (e *CodexWebsocketsExecutor) Execute(ctx context.Context, auth *cliproxyaut
 				wsReqBody = wsReqBodyRetry
 				continue
 			}
-			if sess != nil && shouldRetryCodexWebsocketPrePayloadReadError(errRead, readRetryAttempt) && !codexWebsocketRequestCannotRetryFresh(sess, conn, upstreamBody) {
+			if sess != nil && !receivedPayload && shouldRetryCodexWebsocketPrePayloadReadError(errRead, readRetryAttempt) && !codexWebsocketRequestCannotRetryFresh(sess, conn, upstreamBody) {
 				helps.RecordAPIWebsocketError(ctx, e.cfg, "read_pre_payload_close_retry", errRead)
 				readRetryAttempt++
 				e.clearUpstreamConn(sess, conn, "pre_payload_close_retry", errRead, false)
@@ -604,7 +604,7 @@ func (e *CodexWebsocketsExecutor) Execute(ctx context.Context, auth *cliproxyaut
 				recordAPIWebsocketHandshake(ctx, e.cfg, respHSRetry)
 				reporter.StartResponseTTFT()
 				if errSendRetry := writeCodexWebsocketMessage(sess, connRetry, wsReqBodyRetry); errSendRetry != nil {
-					if shouldFallbackCodexWebsocketSendErrorToHTTP(errSendRetry, upstreamBody) {
+					if shouldFallbackCodexWebsocketSendErrorToHTTP(sess, connRetry, errSendRetry, upstreamBody) {
 						e.clearUpstreamConn(sess, connRetry, "send_pre_payload_close_http_fallback", errSendRetry, false)
 						helps.RecordAPIWebsocketError(ctx, e.cfg, "send_pre_payload_close_http_fallback", errSendRetry)
 						fallbackReq, fallbackOpts := codexHTTPFallbackRequest(req, opts)
@@ -618,13 +618,13 @@ func (e *CodexWebsocketsExecutor) Execute(ctx context.Context, auth *cliproxyaut
 				wsReqBody = wsReqBodyRetry
 				continue
 			}
-			if sess != nil && !receivedPayload && shouldFallbackCodexWebsocketPrePayloadReadErrorToHTTP(errRead, upstreamBody) {
+			if sess != nil && !receivedPayload && shouldFallbackCodexWebsocketPrePayloadReadErrorToHTTP(sess, conn, errRead, upstreamBody) {
 				e.clearUpstreamConn(sess, conn, "read_pre_payload_close_http_fallback", errRead, false)
 				helps.RecordAPIWebsocketError(ctx, e.cfg, "read_pre_payload_close_http_fallback", errRead)
 				fallbackReq, fallbackOpts := codexHTTPFallbackRequest(req, opts)
 				return e.CodexExecutor.Execute(ctx, auth, fallbackReq, fallbackOpts)
 			}
-			if isCodexWebsocketMessageTooBigError(errRead) && canFallbackCodexWebsocketRequestToHTTP(upstreamBody) {
+			if !receivedPayload && isCodexWebsocketMessageTooBigError(errRead) && canFallbackCodexWebsocketRequestToHTTP(sess, conn, upstreamBody) {
 				if sess != nil {
 					e.clearUpstreamConn(sess, conn, "message_too_big_http_fallback", errRead, false)
 				}
@@ -876,7 +876,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 						helps.RecordAPIWebsocketError(ctx, e.cfg, "send_retry_close_sent", errSendRetry)
 						continue
 					}
-					if shouldFallbackCodexWebsocketSendErrorToHTTP(errSendRetry, upstreamBody) {
+					if shouldFallbackCodexWebsocketSendErrorToHTTP(sess, connRetry, errSendRetry, upstreamBody) {
 						e.clearUpstreamConn(sess, connRetry, "send_close_sent_http_fallback", errSendRetry, false)
 						helps.RecordAPIWebsocketError(ctx, e.cfg, "send_close_sent_http_fallback", errSendRetry)
 						sess.clearActive(readCh)
@@ -1002,7 +1002,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 					if errSendRetry := writeCodexWebsocketMessage(sess, connRetry, wsReqBodyRetry); errSendRetry != nil {
 						terminateReason = "send_retry_stale_terminal_close"
 						terminateErr = errSendRetry
-						if shouldFallbackCodexWebsocketSendErrorToHTTP(errSendRetry, upstreamBody) {
+						if shouldFallbackCodexWebsocketSendErrorToHTTP(sess, connRetry, errSendRetry, upstreamBody) {
 							terminateReason = "send_stale_terminal_close_http_fallback"
 							helps.RecordAPIWebsocketError(ctx, e.cfg, "send_stale_terminal_close_http_fallback", errSendRetry)
 							e.clearUpstreamConn(sess, connRetry, terminateReason, errSendRetry, false)
@@ -1082,7 +1082,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 					if errSendRetry := writeCodexWebsocketMessage(sess, connRetry, wsReqBodyRetry); errSendRetry != nil {
 						terminateReason = "send_retry_pre_payload_close"
 						terminateErr = errSendRetry
-						if shouldFallbackCodexWebsocketSendErrorToHTTP(errSendRetry, upstreamBody) {
+						if shouldFallbackCodexWebsocketSendErrorToHTTP(sess, connRetry, errSendRetry, upstreamBody) {
 							terminateReason = "send_pre_payload_close_http_fallback"
 							helps.RecordAPIWebsocketError(ctx, e.cfg, "send_pre_payload_close_http_fallback", errSendRetry)
 							e.clearUpstreamConn(sess, connRetry, terminateReason, errSendRetry, false)
@@ -1124,7 +1124,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 					terminateErr = nil
 					continue
 				}
-				if sess != nil && !sentPayload && shouldFallbackCodexWebsocketPrePayloadReadErrorToHTTP(errRead, upstreamBody) {
+				if sess != nil && !sentPayload && shouldFallbackCodexWebsocketPrePayloadReadErrorToHTTP(sess, conn, errRead, upstreamBody) {
 					terminateReason = "read_pre_payload_close_http_fallback"
 					terminateErr = errRead
 					helps.RecordAPIWebsocketError(ctx, e.cfg, "read_pre_payload_close_http_fallback", errRead)
@@ -1155,7 +1155,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 					}
 					return
 				}
-				if !sentPayload && isCodexWebsocketMessageTooBigError(errRead) && canFallbackCodexWebsocketRequestToHTTP(upstreamBody) {
+				if !sentPayload && isCodexWebsocketMessageTooBigError(errRead) && canFallbackCodexWebsocketRequestToHTTP(sess, conn, upstreamBody) {
 					terminateReason = "message_too_big_http_fallback"
 					helps.RecordAPIWebsocketError(ctx, e.cfg, "read_message_too_big_http_fallback", errRead)
 					if sess != nil {
@@ -1391,12 +1391,12 @@ func shouldRetryCodexWebsocketSendError(err error, retryAttempt int) bool {
 	return retryAttempt < codexResponsesWebsocketSendRetryLimit && isCodexWebsocketCloseSentError(err)
 }
 
-func shouldFallbackCodexWebsocketSendErrorToHTTP(err error, body []byte) bool {
-	return isCodexWebsocketCloseSentError(err) && canFallbackCodexWebsocketRequestToHTTP(body)
+func shouldFallbackCodexWebsocketSendErrorToHTTP(sess *codexWebsocketSession, conn *websocket.Conn, err error, body []byte) bool {
+	return isCodexWebsocketCloseSentError(err) && canFallbackCodexWebsocketRequestToHTTP(sess, conn, body)
 }
 
-func shouldFallbackCodexWebsocketPrePayloadReadErrorToHTTP(err error, body []byte) bool {
-	return shouldRetryCodexWebsocketPrePayloadReadError(err, 0) && canFallbackCodexWebsocketRequestToHTTP(body)
+func shouldFallbackCodexWebsocketPrePayloadReadErrorToHTTP(sess *codexWebsocketSession, conn *websocket.Conn, err error, body []byte) bool {
+	return shouldRetryCodexWebsocketPrePayloadReadError(err, 0) && canFallbackCodexWebsocketRequestToHTTP(sess, conn, body)
 }
 
 func shouldRetryCodexWebsocketPrePayloadReadError(err error, retryAttempt int) bool {
@@ -1446,14 +1446,14 @@ func codexWebsocketRequestRequiresExistingUpstream(sess *codexWebsocketSession, 
 	if codexWebsocketRequestIsAppendOnly(body) {
 		return true
 	}
-	return codexWebsocketRequestUsesPreviousResponseID(body) && sess != nil && sess.lostTerminalState()
+	return sess != nil && sess.lostTerminalState() && codexWebsocketRequestNeedsLiveUpstream(body)
 }
 
 func codexWebsocketRequestCannotRetryFresh(sess *codexWebsocketSession, conn *websocket.Conn, body []byte) bool {
 	if codexWebsocketRequestIsAppendOnly(body) {
 		return true
 	}
-	return codexWebsocketRequestUsesPreviousResponseID(body) && sess != nil && sess.connHasTerminalState(conn)
+	return sess != nil && sess.connHasTerminalState(conn) && codexWebsocketRequestNeedsLiveUpstream(body)
 }
 
 func codexWebsocketRequestIsAppendOnly(body []byte) bool {
@@ -1468,11 +1468,41 @@ func codexWebsocketRequestUsesPreviousResponseID(body []byte) bool {
 }
 
 func codexWebsocketRequestStartsFreshContext(body []byte) bool {
-	return strings.TrimSpace(gjson.GetBytes(body, "type").String()) != "response.append" && !codexWebsocketRequestUsesPreviousResponseID(body)
+	return !codexWebsocketRequestNeedsLiveUpstream(body)
 }
 
-func canFallbackCodexWebsocketRequestToHTTP(body []byte) bool {
+func codexWebsocketRequestNeedsLiveUpstream(body []byte) bool {
+	if codexWebsocketRequestUsesPreviousResponseID(body) || codexWebsocketRequestIsAppendOnly(body) {
+		return true
+	}
+	if strings.TrimSpace(gjson.GetBytes(body, "type").String()) != "response.create" {
+		return false
+	}
+	return !codexWebsocketInputLooksFullTranscript(gjson.GetBytes(body, "input"))
+}
+
+func codexWebsocketInputLooksFullTranscript(input gjson.Result) bool {
+	if !input.IsArray() {
+		return false
+	}
+	for _, item := range input.Array() {
+		switch strings.TrimSpace(item.Get("type").String()) {
+		case "compaction", "compaction_summary", "function_call", "custom_tool_call":
+			return true
+		case "message":
+			if strings.TrimSpace(item.Get("role").String()) == "assistant" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func canFallbackCodexWebsocketRequestToHTTP(sess *codexWebsocketSession, conn *websocket.Conn, body []byte) bool {
 	if codexWebsocketRequestIsAppendOnly(body) {
+		return false
+	}
+	if sess != nil && sess.connHasTerminalState(conn) && codexWebsocketRequestNeedsLiveUpstream(body) {
 		return false
 	}
 	return strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String()) == ""
@@ -2626,6 +2656,13 @@ func (e *CodexAutoExecutor) UpstreamDisconnectChan(sessionID string) <-chan erro
 		return nil
 	}
 	return e.wsExec.UpstreamDisconnectChan(sessionID)
+}
+
+func (e *CodexAutoExecutor) UpstreamSessionActive(sessionID string) bool {
+	if e == nil || e.wsExec == nil {
+		return false
+	}
+	return e.wsExec.UpstreamSessionActive(sessionID)
 }
 
 func codexWebsocketsEnabled(auth *cliproxyauth.Auth) bool {
