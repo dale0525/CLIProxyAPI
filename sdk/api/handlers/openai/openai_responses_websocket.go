@@ -470,6 +470,7 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 		previousLastResponseOutput := bytes.Clone(lastResponseOutput)
 		previousLastResponseID := lastResponseID
 		previousLastResponsePendingToolCallIDs := append([]string(nil), lastResponsePendingToolCallIDs...)
+		previousPassthroughModelName := passthroughModelName
 		forcedTranscriptReplay := forceTranscriptReplayNextRequest
 		if useUpstreamWebsocketPassthrough {
 			if modelName := strings.TrimSpace(gjson.GetBytes(requestJSON, "model").String()); modelName != "" {
@@ -528,6 +529,7 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 			lastResponseOutput = previousLastResponseOutput
 			lastResponseID = previousLastResponseID
 			lastResponsePendingToolCallIDs = previousLastResponsePendingToolCallIDs
+			passthroughModelName = previousPassthroughModelName
 			goto retryCurrentPayloadAfterStateLoss
 		}
 		if forwardErrMsg == nil && !useUpstreamWebsocketPassthrough && lastAttemptedAuthID != "" {
@@ -559,6 +561,7 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 			lastResponseOutput = previousLastResponseOutput
 			lastResponseID = previousLastResponseID
 			lastResponsePendingToolCallIDs = previousLastResponsePendingToolCallIDs
+			passthroughModelName = previousPassthroughModelName
 		} else if !useUpstreamWebsocketPassthrough {
 			lastResponseOutput = completedOutput
 			lastResponseID = strings.TrimSpace(completedResponseID)
