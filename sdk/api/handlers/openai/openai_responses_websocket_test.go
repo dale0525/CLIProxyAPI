@@ -2700,12 +2700,15 @@ func TestResponsesWebsocketErrorDoesNotCacheFailedTurn(t *testing.T) {
 	if bytes.Contains(reconnectPayload, []byte(`"id":"msg-2"`)) {
 		t.Fatalf("failed non-passthrough turn leaked into reconnect request: %s", reconnectPayload)
 	}
-	if got := gjson.GetBytes(reconnectPayload, "previous_response_id").String(); got != "resp-1" {
-		t.Fatalf("reconnect previous_response_id = %s, want resp-1: %s", got, reconnectPayload)
+	if gjson.GetBytes(reconnectPayload, "previous_response_id").Exists() {
+		t.Fatalf("reconnect request should replay transcript without previous_response_id: %s", reconnectPayload)
 	}
 	input := gjson.GetBytes(reconnectPayload, "input").Array()
-	if len(input) != 1 || input[0].Get("id").String() != "msg-3" {
-		t.Fatalf("reconnect request should only include the new turn: %s", reconnectPayload)
+	if len(input) != 3 ||
+		input[0].Get("id").String() != "msg-1" ||
+		input[1].Get("id").String() != "out-1" ||
+		input[2].Get("id").String() != "msg-3" {
+		t.Fatalf("reconnect request should replay successful transcript without failed turn: %s", reconnectPayload)
 	}
 }
 
